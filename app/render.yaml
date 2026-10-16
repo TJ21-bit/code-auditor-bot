@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: 88gravity-code-auditor
+    env: python
+    buildCommand: pip install -r requirements.txt && pip install "sqlalchemy==2.0.36" greenlet
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: GITHUB_TOKEN
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: SMTP_FROM
+        value: onboarding@resend.dev
+      - key: GOOGLE_SHEET_ID
+        sync: false
+      - key: GOOGLE_SHEET_TAB
+        value: Code Issues
+      - key: GOOGLE_CREDENTIALS_JSON
+        sync: false
+      - key: FOLLOWUP_INTERVAL_HOURS
+        value: 48
