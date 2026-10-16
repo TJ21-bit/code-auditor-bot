@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>{% block title %}Code Auditor{% endblock %} — 88gravity</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%23c89b3c'/><text x='50%' y='65%' text-anchor='middle' font-size='13' font-weight='800' fill='%230d1b2e' font-family='system-ui'>88</text></svg>"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="/static/style.css"/>
+</head>
+<body>
+<header class="topbar">
+  <div class="tb-brand">
+    <div class="tb-mark">88</div>
+    <div>
+      <div class="tb-name">Code Auditor</div>
+      <div class="tb-sub">88gravity · internal tool</div>
+    </div>
+  </div>
+  <nav class="tb-nav">
+    <a href="/"           class="tb-tab {% if active=='dashboard'  %}active{% endif %}">📊 Dashboard</a>
+    <a href="/new-audit"  class="tb-tab {% if active=='browse' or active=='new_audit' %}active{% endif %}">📁 Browse &amp; Audit</a>
+    <a href="/followups"  class="tb-tab {% if active=='followups'  %}active{% endif %}">⏱ Follow-ups</a>
+    <a href="/developers" class="tb-tab {% if active=='developers' %}active{% endif %}">👥 Developers</a>
+    <a href="/docs" target="_blank" class="tb-tab">⚡ API</a>
+  </nav>
+  <div class="tb-right">
+    <div class="live-pill"><div class="live-dot"></div>Live</div>
+  </div>
+</header>
+<div class="app-body">{% block content %}{% endblock %}</div>
+<div class="toast" id="toast"><span id="ti" style="font-size:15px">✅</span><span id="tm"></span></div>
+<script>
+function toast(msg,t='s'){const i={s:'✅',e:'❌',i:'ℹ️',w:'⚠️'};document.getElementById('ti').textContent=i[t]||'✅';document.getElementById('tm').textContent=msg;const el=document.getElementById('toast');el.classList.add('on');setTimeout(()=>el.classList.remove('on'),3800)}
+function ini(n){return n?(n.trim().split(/\s+/).map(w=>w[0]).join('').substring(0,2).toUpperCase()):'?'}
+function ocolor(e=''){const m={'rahul@88gravity.com':'#6366f1','priya@88gravity.com':'#e11d74','ankit@88gravity.com':'#d97706','deepa@88gravity.com':'#059669','karan@88gravity.com':'#7c3aed'};return m[e]||'#'+Math.abs(e.split('').reduce((a,c)=>((a<<5)-a)+c.charCodeAt(0),0)).toString(16).substring(0,6).padStart(6,'5')}
+function ago(t){if(!t)return'—';const d=(Date.now()-new Date(/Z$/.test(t)?t:t+'Z').getTime())/3.6e6;return d<1?Math.round(d*60)+'m ago':d<24?Math.round(d)+'h ago':Math.round(d/24)+'d ago'}
+function tleft(dl){if(!dl)return{l:'—',c:'ok'};const ms=new Date(/Z$/.test(dl)?dl:dl+'Z').getTime()-Date.now();if(ms<=0)return{l:'Overdue',c:'ov'};const h=ms/3.6e6;return h<8?{l:Math.round(h)+'h left',c:'so'}:{l:Math.round(h)+'h left',c:'ok'}}
+function stag(s){const c=s>=80?'sc-g':s>=55?'sc-a':'sc-r';return'<span class="score-tag '+c+'">'+s+'/100</span>'}
+</script>
+<script>{% block scripts %}{% endblock %}</script>
+</body>
+</html>
