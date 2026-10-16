@@ -1,0 +1,19 @@
+version: "3.9"
+
+services:
+  auditor:
+    build: .
+    container_name: code-auditor-bot
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    volumes:
+      - ./auditor.db:/app/auditor.db          # SQLite persisted on host
+      - ./credentials:/app/credentials         # Google service account JSON
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
