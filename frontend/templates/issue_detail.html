@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+{% block title %}Issue {{ issue_id }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <a href="/" class="back-link">← Back to dashboard</a>
+    <h1 class="page-title" id="issue-title">Loading…</h1>
+    <p class="page-sub mono" id="issue-id">{{ issue_id }}</p>
+  </div>
+  <div style="display:flex;gap:8px" id="issue-actions"></div>
+</div>
+
+<div class="detail-grid">
+  <!-- Left: main info -->
+  <div style="display:flex;flex-direction:column;gap:16px">
+    <div class="card">
+      <div class="card-header"><span class="card-title">Issue Details</span></div>
+      <div class="card-body">
+        <div class="detail-row"><span class="detail-label">Severity</span><span id="d-severity"></span></div>
+        <div class="detail-row"><span class="detail-label">Category</span><span id="d-category"></span></div>
+        <div class="detail-row"><span class="detail-label">Status</span><span id="d-status"></span></div>
+        <div class="detail-row"><span class="detail-label">File</span><code id="d-file"></code></div>
+        <div class="detail-row"><span class="detail-label">Line</span><span id="d-line"></span></div>
+        <div class="detail-row"><span class="detail-label">Language</span><span id="d-lang"></span></div>
+        <div class="detail-row"><span class="detail-label">Repo</span><code id="d-repo"></code></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><span class="card-title">Description</span></div>
+      <div class="card-body"><p id="d-description" style="color:var(--text-sec);line-height:1.7"></p></div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><span class="card-title">💡 Suggested Fix</span></div>
+      <div class="card-body"><pre id="d-fix" style="white-space:pre-wrap;font-family:var(--mono);font-size:12.5px;color:var(--text)"></pre></div>
+    </div>
+  </div>
+
+  <!-- Right: assignment + parking -->
+  <div style="display:flex;flex-direction:column;gap:16px">
+    <div class="card">
+      <div class="card-header"><span class="card-title">👤 Owner</span></div>
+      <div class="card-body">
+        <div id="d-owner" style="margin-bottom:14px"></div>
+        <div class="form-group">
+          <label>Reassign to</label>
+          <input id="reassign-email" placeholder="email@88gravity.com" />
+        </div>
+        <div class="form-group">
+          <input id="reassign-name" placeholder="Name" />
+        </div>
+        <button class="btn btn-outline btn-sm" onclick="reassign()">Reassign</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><span class="card-title">🔗 Integrations</span></div>
+      <div class="card-body">
+        <div class="detail-row"><span class="detail-label">Jira</span><span id="d-jira"></span></div>
+        <div class="detail-row"><span class="detail-label">Sheet row</span><span id="d-sheet"></span></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><span class="card-title">⏱ Timeline</span></div>
+      <div class="card-body">
+        <div class="detail-row"><span class="detail-label">Raised</span><span id="d-created"></span></div>
+        <div class="detail-row"><span class="detail-label">Deadline</span><span id="d-deadline"></span></div>
+        <div class="detail-row"><span class="detail-label">Follow-ups sent</span><span id="d-followups"></span></div>
+        <div class="detail-row"><span class="detail-label">Last follow-up</span><span id="d-lastfu"></span></div>
+        <div class="detail-row"><span class="detail-label">Resolved at</span><span id="d-resolved"></span></div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+const ISSUE_ID = '{{ issue_id }}';
+const sevColor = { critical:'red', warning:'amber', info:'blue' };
+
+function fmt(dt) {
+  if (!dt) return '—';
+  return new Date(dt + (dt.endsWith('Z') ? '' : 'Z')).toLocaleString();
+}
+
+async function loadIssue() {
+  const r = await fetch(`/issues/${ISSUE_ID}`);
+  if (!r.ok) { document.querySelector('.page-title').textContent = 'Issue not found'; return; }
+  const i = await r.json();
+
+  document.getElementById('issue-title').textContent = i.title;
+  document.getElementById('d-severity').innerHTML  = `<span class="badge badge-${sevColor[i.severity]||'blue'}">${i.severity}</span>`;
+  document.getElementById('d-category').textContent = i.category;
+  document.getElementById('d-status').innerHTML    = `<span class="badge badge-${i.status}">${i.status}</span>`;
+  document.getElementById('d-file').textContent    = i.file_path || '—';
+  document.getElementById('d-line').textContent    = i.line_number || '—';
+  document.getElementById('d-lang').textContent    = i.language || '—';
+  document.getElementById('d-repo').textContent    = i.repo || '—';
+  document.getElementById('d-description').textContent = i.description || '—';
+  document.getElementById('d-fix').textContent     = i.fix_suggestion || '—';
+  document.getElementById('d-followups').textContent = i.followup_count;
+  document.getElementById('d-created').textContent  = fmt(i.created_at);
+  document.getElementById('d-deadline').textContent  = fmt(i.deadline_at);
+  document.getElementById('d-lastfu').textContent    = fmt(i.last_followup_at);
+  document.getElementById('d-resolved').textContent  = fmt(i.resolved_at);
+
+  document.getElementById('d-owner').innerHTML = i.owner_name
+    ? `<div style="display:flex;align-items:center;gap:10px">
+         <div style="width:36px;height:36px;border-radius:50%;background:#667eea;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px">${(i.owner_name||'?').split(' ').map(w=>w[0]).join('').substring(0,2).toUpperCase()}</div>
+         <div><div style="font-weight:600">${i.owner_name}</div><div style="font-size:12px;color:var(--text-sec)">${i.owner_email||''}</div></div>
+       </div>`
+    : '<span style="color:var(--text-mute)">Unassigned</span>';
+
+  document.getElementById('d-jira').innerHTML = i.jira_ticket_url
+    ? `<a href="${i.jira_ticket_url}" target="_blank" style="color:var(--teal)">${i.jira_ticket_id} ↗</a>`
+    : '<span style="color:var(--text-mute)">Not parked</span>';
+  document.getElementById('d-sheet').textContent = i.sheet_row_index ? `Row ${i.sheet_row_index}` : '—';
+
+  // Actions
+  const actions = document.getElementById('issue-actions');
+  if (i.status !== 'resolved') {
+    actions.innerHTML = `
+      <button class="btn btn-outline" onclick="setStatus('in_progress')">Mark In Progress</button>
+      <button class="btn btn-primary" onclick="setStatus('resolved')">✓ Mark Resolved</button>
+    `;
+  } else {
+    actions.innerHTML = `<span class="badge badge-resolved" style="font-size:13px;padding:6px 14px">✅ Resolved</span>`;
+  }
+}
+
+async function setStatus(status) {
+  await fetch(`/issues/${ISSUE_ID}`, {
+    method:'PATCH',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ status })
+  });
+  loadIssue();
+}
+
+async function reassign() {
+  const email = document.getElementById('reassign-email').value.trim();
+  const name  = document.getElementById('reassign-name').value.trim();
+  if (!email) { alert('Enter an email'); return; }
+  await fetch(`/issues/${ISSUE_ID}`, {
+    method:'PATCH',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ owner_email: email, owner_name: name || email })
+  });
+  loadIssue();
+}
+
+loadIssue();
+{% endblock %}

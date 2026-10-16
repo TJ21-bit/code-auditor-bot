@@ -1,0 +1,613 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<aside class="sidebar">
+  <div class="sb-sect">
+    <span class="sb-lbl">Navigation</span>
+    <a href="/"           class="sb-a on"><div class="sb-l"><span class="sb-ic">📊</span><span class="sb-tx">Dashboard</span></div></a>
+    <a href="/new-audit"  class="sb-a"><div class="sb-l"><span class="sb-ic">📁</span><span class="sb-tx">Browse &amp; Audit</span></div><span class="sb-badge b" id="sb-tot">0</span></a>
+    <a href="/followups"  class="sb-a"><div class="sb-l"><span class="sb-ic">⏱</span><span class="sb-tx">Follow-ups</span></div><span class="sb-badge a" id="sb-ov">0</span></a>
+    <a href="/developers" class="sb-a"><div class="sb-l"><span class="sb-ic">👥</span><span class="sb-tx">Developers</span></div></a>
+  </div>
+  <div class="sb-hr"></div>
+  <div class="sb-sect">
+    <span class="sb-lbl">By Severity</span>
+    <div class="sb-a" onclick="filterSev('critical')"><div class="sb-l"><span class="sb-ic">🔴</span><span class="sb-tx">Critical</span></div><span class="sb-badge r" id="sb-cr">0</span></div>
+    <div class="sb-a" onclick="filterSev('warning')"> <div class="sb-l"><span class="sb-ic">🟡</span><span class="sb-tx">Warning</span></div> <span class="sb-badge a" id="sb-wa">0</span></div>
+    <div class="sb-a" onclick="filterSev('info')">    <div class="sb-l"><span class="sb-ic">🔵</span><span class="sb-tx">Info</span></div>     <span class="sb-badge b" id="sb-in">0</span></div>
+    <div class="sb-a" onclick="filterSev('resolved')"><div class="sb-l"><span class="sb-ic">✅</span><span class="sb-tx">Resolved</span></div> <span class="sb-badge g" id="sb-re">0</span></div>
+  </div>
+  <div class="sb-hr"></div>
+  <div class="sb-sect">
+    <span class="sb-lbl">Owners</span>
+    <div id="sb-owners"><p style="font-size:12px;color:var(--textd3);padding:4px 9px">No open issues</p></div>
+  </div>
+</aside>
+
+<main class="content">
+  <div class="ph">
+    <div>
+      <h1>Dashboard</h1>
+      <p>All audit runs — click any audit to see its issues</p>
+    </div>
+    <div class="ph-act">
+      <button class="btn btn-od btn-sm" onclick="exportCSV()">⬇ Export</button>
+      <button class="btn btn-od btn-sm" onclick="parkAllToSheets()" id="park-btn">📊 Sync to Sheets</button>
+      <button class="btn btn-od btn-sm" onclick="syncHubSpot()" id="hs-btn">🟠 Sync HubSpot</button>
+      <a href="/new-audit" class="btn btn-p">+ New Audit</a>
+    </div>
+  </div>
+
+  <!-- KPIs -->
+  <div class="kpis">
+    <div class="kpi kr"><span class="kpi-ico">🔴</span><div class="kpi-v" id="k-cr">0</div><div class="kpi-l">Critical</div></div>
+    <div class="kpi ka"><span class="kpi-ico">🟡</span><div class="kpi-v" id="k-wa">0</div><div class="kpi-l">Warning</div></div>
+    <div class="kpi kb"><span class="kpi-ico">🔵</span><div class="kpi-v" id="k-in">0</div><div class="kpi-l">Info</div></div>
+    <div class="kpi kg"><span class="kpi-ico">✅</span><div class="kpi-v" id="k-re">0</div><div class="kpi-l">Resolved</div></div>
+    <div class="kpi kt"><span class="kpi-ico">📋</span><div class="kpi-v" id="k-ji">0</div><div class="kpi-l">In Jira</div></div>
+    <div class="kpi kp"><span class="kpi-ico">📊</span><div class="kpi-v" id="k-sh">0</div><div class="kpi-l">In Sheets</div></div>
+  </div>
+
+  <!-- Live audit banner -->
+  <div id="job-banner" style="display:none;background:rgba(37,99,235,.1);border:1px solid rgba(37,99,235,.25);border-radius:10px;padding:14px 18px;margin-bottom:16px">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+      <div style="display:flex;align-items:center;gap:12px">
+        <div class="spin" style="border-top-color:#60a5fa"></div>
+        <div>
+          <div style="font-weight:600;color:#93c5fd;font-size:13.5px">Audit in progress</div>
+          <div style="font-size:12px;color:var(--textd3);margin-top:2px" id="job-status-text">Processing files…</div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <button class="btn btn-gh btn-xs" onclick="dismissBanner()" style="color:var(--textd3)">✕ Dismiss</button>
+      </div>
+    </div>
+    <div style="margin-top:10px;height:3px;background:rgba(255,255,255,.08);border-radius:99px;overflow:hidden">
+      <div id="job-prog-bar" style="height:100%;background:linear-gradient(90deg,#3b82f6,#8b5cf6);border-radius:99px;width:0%;transition:width .5s ease"></div>
+    </div>
+  </div>
+
+  <!-- Audit runs list -->
+  <div id="audits-wrap">
+    <div style="padding:48px;text-align:center;color:var(--textd3);display:flex;flex-direction:column;align-items:center;gap:10px">
+      <div class="spin"></div>Loading…
+    </div>
+  </div>
+</main>
+
+<!-- Resolve modal -->
+<div id="resolve-modal" class="modal-hidden" style="position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:500;align-items:center;justify-content:center;backdrop-filter:blur(4px)" onclick="if(event.target===this)closeResolveModal()">
+  <div style="background:var(--bg3);border:1px solid rgba(255,255,255,.12);border-radius:14px;width:480px;max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,.5)">
+    <div style="padding:20px 24px;border-bottom:1px solid rgba(255,255,255,.08);display:flex;align-items:center;justify-content:space-between">
+      <div>
+        <div style="font-weight:700;color:var(--textd);font-size:15px">✓ Mark as Resolved</div>
+        <div style="font-size:12px;color:var(--textd3);margin-top:3px" id="resolve-issue-id"></div>
+      </div>
+      <button onclick="closeResolveModal()" style="background:rgba(255,255,255,.08);border:none;color:var(--textd2);width:28px;height:28px;border-radius:6px;cursor:pointer;font-size:14px">✕</button>
+    </div>
+    <div style="padding:20px 24px">
+      <div style="font-weight:600;color:var(--textd);font-size:13.5px;margin-bottom:6px" id="resolve-issue-title"></div>
+      <div style="font-size:12px;color:var(--textd3);margin-bottom:18px">Optionally describe how this was fixed. You can skip this if you prefer.</div>
+      <div style="margin-bottom:6px">
+        <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--textd3)">Resolution note <span style="font-weight:400;opacity:.6">(optional)</span></label>
+      </div>
+      <textarea id="resolve-note" placeholder="e.g. Moved API key to environment variables and rotated the old one..." style="width:100%;min-height:100px;padding:11px 14px;border:1.5px solid rgba(255,255,255,.14);border-radius:9px;font-size:13.5px;font-family:var(--font);color:var(--textd);background:rgba(255,255,255,.07);outline:none;resize:vertical;box-sizing:border-box;line-height:1.5"></textarea>
+    </div>
+    <div style="padding:14px 24px;border-top:1px solid rgba(255,255,255,.08);display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn btn-od" onclick="closeResolveModal()">Cancel</button>
+      <button class="btn btn-od btn-sm" onclick="submitResolve(true)" style="color:var(--textd3)">Skip &amp; Resolve</button>
+      <button class="btn btn-g btn-sm" onclick="submitResolve(false)" style="padding:8px 20px">✓ Mark Resolved</button>
+    </div>
+  </div>
+</div>
+
+<!-- Issue detail drawer -->
+<div id="drawer-overlay" onclick="closeDrawer()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:400;backdrop-filter:blur(4px)"></div>
+<div id="drawer" style="display:none;position:fixed;top:0;right:0;bottom:0;width:580px;max-width:95vw;background:var(--bg3);border-left:1px solid rgba(255,255,255,.1);z-index:401;overflow-y:auto;box-shadow:-20px 0 60px rgba(0,0,0,.4)">
+  <div style="padding:20px 24px;border-bottom:1px solid rgba(255,255,255,.08);display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:var(--bg3);z-index:1">
+    <div style="font-size:15px;font-weight:700;color:var(--textd)" id="drawer-title">Issue Details</div>
+    <button class="btn btn-od btn-sm" onclick="closeDrawer()">✕ Close</button>
+  </div>
+  <div id="drawer-body" style="padding:24px"></div>
+</div>
+
+<style>
+.modal-hidden { display: none !important; }
+.audit-card {
+  border:1px solid rgba(255,255,255,.09);
+  border-radius:12px;overflow:hidden;margin-bottom:14px;
+  transition:border-color .15s;
+}
+.audit-card:hover { border-color:rgba(255,255,255,.18); }
+.audit-hd {
+  display:flex;align-items:center;justify-content:space-between;
+  padding:16px 20px;cursor:pointer;gap:14px;
+  background:rgba(255,255,255,.04);
+  transition:background .15s;
+}
+.audit-hd:hover { background:rgba(255,255,255,.07); }
+.audit-body { display:none;border-top:1px solid rgba(255,255,255,.07); }
+.audit-body.open { display:block; }
+
+.issue-row {
+  display:flex;align-items:center;gap:12px;
+  padding:13px 20px;border-bottom:1px solid rgba(255,255,255,.05);
+  cursor:pointer;transition:background .1s;
+}
+.issue-row:last-child { border-bottom:none; }
+.issue-row:hover { background:rgba(255,255,255,.04); }
+
+.sev-dot { width:8px;height:8px;border-radius:50%;flex-shrink:0; }
+.sev-dot.critical { background:var(--red); }
+.sev-dot.warning  { background:var(--amber); }
+.sev-dot.info     { background:var(--blue); }
+
+.drawer-section { margin-bottom:22px; }
+.drawer-label { font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--textd3);margin-bottom:8px; }
+.drawer-val   { font-size:13.5px;color:var(--textd);font-weight:500;line-height:1.55; }
+.drawer-box   { background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.09);border-radius:9px;padding:12px 14px;font-size:13px;color:var(--textd2);line-height:1.6; }
+.drawer-fix   { background:rgba(37,99,235,.1);border:1px solid rgba(37,99,235,.25);border-radius:9px;padding:12px 14px;font-size:13px;color:#93c5fd;line-height:1.6; }
+</style>
+{% endblock %}
+
+{% block scripts %}
+var allIssues = [];
+var openAudit = null;
+
+/* ── Park all to sheets ── */
+async function parkAllToSheets(){
+  var btn = document.getElementById('park-btn');
+  btn.disabled = true;
+  btn.textContent = '⏳ Syncing…';
+  try{
+    var r = await fetch('/issues/park-all-to-sheets', {method:'POST'});
+    var d = await r.json();
+    toast('Parked '+d.parked+' issues to Google Sheets', 's');
+    load(); loadStats();
+  }catch(e){
+    toast('Sync failed: '+e.message, 'e');
+  }
+  btn.disabled = false;
+  btn.textContent = '📊 Sync to Sheets';
+}
+
+/* ── Sync HubSpot ── */
+async function syncHubSpot(){
+  var btn = document.getElementById('hs-btn');
+  btn.disabled = true; btn.textContent = '⏳ Syncing…';
+  try{
+    var r = await fetch('/hubspot/sync-tasks', {method:'POST'});
+    var d = await r.json();
+    toast('Created '+d.created+' HubSpot tasks', 's');
+  }catch(e){ toast('HubSpot sync failed: '+e.message, 'e'); }
+  btn.disabled = false; btn.textContent = '🟠 Sync HubSpot';
+}
+
+/* ── Delete audit ── */
+async function deleteAudit(jobId){
+  if(!confirm('Delete this entire audit and all its issues? This cannot be undone.')) return;
+  try{
+    var r = await fetch('/issues/audit/'+jobId, {method:'DELETE'});
+    var d = await r.json();
+    toast('Deleted ' + d.deleted + ' issues', 's');
+    load(); loadStats();
+  }catch(e){ toast('Delete failed: '+e.message,'e'); }
+}
+
+/* ── Stats ── */
+async function loadStats(){
+  try{
+    var r = await fetch('/issues/stats');
+    if(!r.ok) return;
+    var d = await r.json();
+    document.getElementById('k-cr').textContent  = d.critical  || 0;
+    document.getElementById('k-wa').textContent  = d.warning   || 0;
+    document.getElementById('k-in').textContent  = d.info      || 0;
+    document.getElementById('k-re').textContent  = d.resolved  || 0;
+    document.getElementById('k-ji').textContent  = d.parked_jira  || 0;
+    document.getElementById('k-sh').textContent  = d.parked_sheet || 0;
+    document.getElementById('sb-cr').textContent = d.critical  || 0;
+    document.getElementById('sb-wa').textContent = d.warning   || 0;
+    document.getElementById('sb-in').textContent = d.info      || 0;
+    document.getElementById('sb-re').textContent = d.resolved  || 0;
+    document.getElementById('sb-tot').textContent = d.total    || 0;
+    document.getElementById('sb-ov').textContent  = d.open     || 0;
+  }catch(e){}
+}
+
+/* ── Load all issues then group into audit cards ── */
+async function load(){
+  var wrap = document.getElementById('audits-wrap');
+  wrap.innerHTML = '<div style="padding:48px;text-align:center;color:var(--textd3);display:flex;flex-direction:column;align-items:center;gap:10px"><div class="spin"></div>Loading…</div>';
+  try{
+    var r = await fetch('/issues/');
+    if(!r.ok) throw new Error('Server returned '+r.status+' — check server is running');
+    allIssues = await r.json();
+    // Show count so we know data arrived
+    console.log('Issues loaded from API:', allIssues.length);
+    renderOwnerSidebar(allIssues);
+    renderAudits(allIssues);
+  }catch(e){
+    console.error('Dashboard load error:', e);
+    wrap.innerHTML =
+      '<div style="padding:48px;text-align:center">' +
+        '<div style="font-size:36px;opacity:.3;margin-bottom:12px">❌</div>' +
+        '<div style="font-size:16px;font-weight:700;color:var(--textd2);margin-bottom:8px">Could not load issues</div>' +
+        '<div style="font-size:13px;color:var(--textd3);margin-bottom:16px">'+e.message+'</div>' +
+        '<div style="display:flex;gap:10px;justify-content:center">' +
+          '<button class="btn btn-od" onclick="load()">↺ Retry</button>' +
+          '<a href="/audit/debug/db" target="_blank" class="btn btn-od">🔍 Check DB</a>' +
+        '</div>' +
+      '</div>';
+  }
+}
+
+/* ── Render collapsed audit cards ── */
+function renderAudits(data){
+  var wrap = document.getElementById('audits-wrap');
+  if(!data || !data.length){
+    wrap.innerHTML = '<div style="padding:64px 20px;text-align:center"><div style="font-size:48px;opacity:.15;margin-bottom:16px">🔍</div><div style="font-size:17px;font-weight:700;color:var(--textd2);margin-bottom:8px">No audits yet</div><div style="font-size:13.5px;color:var(--textd3);margin-bottom:20px">Run your first audit to see results here.</div><a href="/new-audit" class="btn btn-p" style="display:inline-flex">+ Start your first audit</a></div>';
+    return;
+  }
+
+  /* Group by commit_sha */
+  var groups = {};
+  for(var i=0; i<data.length; i++){
+    var issue = data[i];
+    var key = (issue.commit_sha || 'unknown') + ':::' + (issue.repo || 'unknown');
+    if(!groups[key]){
+      groups[key] = {
+        job_id: issue.commit_sha || 'unknown',
+        repo: issue.repo || 'Upload',
+        project_name: issue.project_name || '',
+        date: issue.created_at,
+        items: []
+      };
+    }
+    groups[key].items.push(issue);
+  }
+
+  /* Sort newest first */
+  var sorted = Object.values(groups).sort(function(a,b){
+    return new Date(b.date||0) - new Date(a.date||0);
+  });
+
+  var html = '';
+  for(var gi=0; gi<sorted.length; gi++){
+    var g = sorted[gi];
+    var gid = 'aud-' + gi;
+    var crit=0, warn=0, info=0, res=0;
+    for(var ii=0; ii<g.items.length; ii++){
+      var it = g.items[ii];
+      if(it.severity==='critical') crit++;
+      else if(it.severity==='warning') warn++;
+      else if(it.severity==='info') info++;
+      if(it.status==='resolved') res++;
+    }
+    var open = g.items.length - res;
+    var isZip = g.repo === 'zip-upload';
+    var repoIcon = isZip ? '📦' : '🐙';
+    var label = g.project_name || (isZip ? 'Zip Upload' : g.repo.split('/').pop());
+    var dateStr = g.date ? ago(g.date) : '—';
+    var healthDot = crit>0 ? 'var(--red)' : warn>0 ? 'var(--amber)' : '#22c55e';
+
+    var pills = '';
+    if(crit) pills += '<span class="badge b-r">'+crit+' critical</span> ';
+    if(warn) pills += '<span class="badge b-a">'+warn+' warning</span> ';
+    if(info) pills += '<span class="badge b-b">'+info+' info</span> ';
+    if(res)  pills += '<span class="badge b-g">'+res+' resolved</span>';
+
+    /* Issue rows */
+    var rows = '';
+    for(var ri=0; ri<g.items.length; ri++){
+      var iss = g.items[ri];
+      var sevCls = iss.severity==='critical'?'b-r':iss.severity==='warning'?'b-a':'b-b';
+      var stCls  = iss.status==='resolved'?'b-g':iss.status==='in_progress'?'b-b':iss.status==='escalated'?'b-r':'b-a';
+      var fname  = (iss.file_path||'').split('/').pop();
+      rows += '<div class="issue-row" data-id="'+iss.id+'" onclick="openIssue(this.dataset.id)">' +
+        '<div class="sev-dot '+iss.severity+'"></div>' +
+        '<div style="flex:1;min-width:0">' +
+          '<div style="font-weight:600;color:var(--textd);font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+iss.title+'</div>' +
+          '<div style="font-size:11.5px;color:var(--textd3);margin-top:2px">'+(iss.category||'General')+' · <span style="font-family:var(--mono)">'+fname+'</span></div>' +
+        '</div>' +
+        '<div style="display:flex;align-items:center;gap:8px;flex-shrink:0">' +
+          '<div style="width:20px;height:20px;border-radius:50%;background:'+ocolor(iss.owner_email||'')+';display:flex;align-items:center;justify-content:center;font-size:8.5px;font-weight:700;color:#fff">'+ini(iss.owner_name)+'</div>' +
+          '<span style="font-size:12px;color:var(--textd3)">'+(iss.owner_name||'—')+'</span>' +
+          '<span class="badge '+stCls+'" style="font-size:10.5px">'+iss.status+'</span>' +
+          (iss.status!=='resolved' ? '<button class="btn btn-od btn-xs" data-id="'+iss.id+'" onclick="event.stopPropagation();quickResolve(this.dataset.id,this.dataset.title)" data-title="'+encodeURIComponent(iss.title)+'">✓</button>' : '') +
+        '</div>' +
+      '</div>';
+    }
+
+    html += '<div class="audit-card" id="'+gid+'">' +
+      '<div class="audit-hd" data-gid="' + gid + '" onclick="toggleAudit(this.dataset.gid)">' +
+        '<div style="display:flex;align-items:center;gap:14px;min-width:0;flex:1">' +
+          '<div style="width:36px;height:36px;border-radius:9px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">'+repoIcon+'</div>' +
+          '<div style="min-width:0">' +
+            '<div style="font-weight:700;color:var(--textd);font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+label+'</div>' +
+            '<div style="display:flex;align-items:center;gap:8px;margin-top:3px;flex-wrap:wrap">' +
+              '<span style="font-size:12px;color:var(--textd3)">'+dateStr+'</span>' +
+              '<span style="color:var(--textd3)">·</span>' +
+              '<span style="font-size:12px;color:var(--textd3)">'+g.items.length+' issue'+(g.items.length!==1?'s':'')+'</span>' +
+              '<span style="color:var(--textd3)">·</span>' +
+              (open>0 ? '<span style="font-size:12px;color:#fcd34d;font-weight:600">'+open+' open</span>' : '<span style="font-size:12px;color:#86efac;font-weight:600">All resolved ✓</span>') +
+            '</div>' +
+          '</div>' +
+        '</div>' +
+        '<div style="display:flex;align-items:center;gap:8px;flex-shrink:0">' +
+          pills +
+          '<div style="width:8px;height:8px;border-radius:50%;background:'+healthDot+';margin-left:4px"></div>' +
+          '<span style="color:var(--textd3);font-size:13px;margin-left:2px" id="'+gid+'-ch">▸</span>' +
+          '<button onclick="event.stopPropagation();deleteAudit(this.dataset.job)" data-job="'+g.job_id+'" style="margin-left:6px;background:rgba(220,38,38,.1);border:1px solid rgba(220,38,38,.2);color:#fca5a5;border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer;font-family:var(--font)">🗑</button>' +
+        '</div>' +
+      '</div>' +
+      '<div class="audit-body" id="'+gid+'-body">' +
+        '<div style="padding:8px 20px 4px;text-align:right;font-size:11.5px;color:var(--textd3)">Click an issue to view details</div>' +
+        rows +
+      '</div>' +
+    '</div>';
+  }
+
+  wrap.innerHTML = html;
+}
+
+/* ── Toggle audit card ── */
+function toggleAudit(id){
+  var body = document.getElementById(id+'-body');
+  var ch   = document.getElementById(id+'-ch');
+  if(!body) return;
+  var isOpen = body.classList.contains('open');
+  body.classList.toggle('open', !isOpen);
+  if(ch) ch.textContent = isOpen ? '▸' : '▾';
+}
+
+/* ── Open issue detail drawer ── */
+async function openIssue(id){
+  // Fetch fresh issue data to get resolution_note and latest status
+  try{
+    var r = await fetch('/issues/'+id);
+    if(r.ok){
+      var fresh = await r.json();
+      // Update in allIssues
+      var idx = allIssues.findIndex(function(i){ return i.id===id; });
+      if(idx>=0) allIssues[idx] = fresh;
+    }
+  }catch(e){}
+  var issue = allIssues.find(function(i){ return i.id===id; });
+  if(!issue) return;
+
+  var sc = {critical:'b-r',warning:'b-a',info:'b-b'};
+  var stb = {open:'b-a',in_progress:'b-b',resolved:'b-g',escalated:'b-r'};
+  var tl = tleft(issue.deadline_at);
+
+  document.getElementById('drawer-title').textContent = issue.id;
+  document.getElementById('drawer-body').innerHTML =
+    /* Severity + status row */
+    '<div style="display:flex;align-items:center;gap:8px;margin-bottom:18px">'+
+      '<span class="badge '+(sc[issue.severity]||'b-x')+'" style="font-size:12px;padding:4px 12px">'+issue.severity+'</span>'+
+      '<span class="badge '+(stb[issue.status]||'b-x')+'" style="font-size:12px;padding:4px 12px">'+issue.status+'</span>'+
+      (issue.status!=='resolved' ? '<span class="sla sla-'+tl.c+'" style="margin-left:auto">⏱ '+tl.l+'</span>' : '')+
+    '</div>'+
+
+    /* Title */
+    '<div style="font-size:18px;font-weight:800;color:var(--textd);letter-spacing:-.4px;line-height:1.3;margin-bottom:6px">'+issue.title+'</div>'+
+    '<div style="font-size:12.5px;color:var(--textd3);margin-bottom:20px">'+( issue.category||'General')+' · '+( issue.repo||'')+'</div>'+
+
+    /* File + line */
+    '<div class="drawer-section">'+
+      '<div class="drawer-label">File</div>'+
+      '<div style="font-family:var(--mono);font-size:13px;color:var(--textd2);background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.09);border-radius:8px;padding:9px 12px">'+
+        (issue.file_path||'—')+(issue.line_number?' <span style="color:var(--textd3)">· Line '+issue.line_number+'</span>':'')+
+      '</div>'+
+    '</div>'+
+
+    /* Description */
+    (issue.description ?
+      '<div class="drawer-section">'+
+        '<div class="drawer-label">Description</div>'+
+        '<div class="drawer-box">'+issue.description+'</div>'+
+      '</div>' : '')+
+
+    /* Fix suggestion */
+    (issue.fix_suggestion ?
+      '<div class="drawer-section">'+
+        '<div class="drawer-label">💡 Fix Suggestion</div>'+
+        '<div class="drawer-fix">'+issue.fix_suggestion+'</div>'+
+      '</div>' : '')+
+
+    /* Owner + Assigned */
+    '<div class="drawer-section">'+
+      '<div class="drawer-label">Assigned To</div>'+
+      '<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.09);border-radius:9px">'+
+        '<div style="width:34px;height:34px;border-radius:50%;background:'+ocolor(issue.owner_email||'')+';display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff">'+ini(issue.owner_name)+'</div>'+
+        '<div>'+
+          '<div style="font-weight:600;color:var(--textd);font-size:13.5px">'+(issue.owner_name||'Unassigned')+'</div>'+
+          '<div style="font-size:12px;color:var(--textd3)">'+(issue.owner_email||'')+'</div>'+
+        '</div>'+
+      '</div>'+
+    '</div>'+
+
+    /* Integration status */
+    '<div class="drawer-section">'+
+      '<div class="drawer-label">Integration Status</div>'+
+      '<div style="display:flex;gap:8px;flex-wrap:wrap">'+
+        (issue.parked_to_jira  ? '<span class="badge b-b">📋 In Jira</span>'   : '<span class="badge b-x" style="opacity:.5">📋 Not in Jira</span>')+
+        (issue.parked_to_sheet ? '<span class="badge b-g">📊 In Sheets</span>' : '<span class="badge b-x" style="opacity:.5">📊 Not in Sheets</span>')+
+      '</div>'+
+    '</div>'+
+
+    /* Actions */
+    (issue.status !== 'resolved' ?
+      '<div style="display:flex;gap:8px;margin-top:8px">'+
+        '<button class="btn btn-p btn-sm" style="flex:1;justify-content:center" onclick="resolveFromDrawer(this.dataset.id)" data-id="'+issue.id+'">✓ Mark Resolved</button>'+
+      '</div>'
+    : '<div style="margin-top:8px">' +
+        '<div style="text-align:center;padding:12px;color:#86efac;font-weight:600;font-size:14px">✅ Issue Resolved</div>' +
+        (issue.resolution_note ?
+          '<div style="background:rgba(22,163,74,.08);border:1px solid rgba(22,163,74,.2);border-radius:9px;padding:12px 14px;margin-top:8px">' +
+            '<div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#86efac;margin-bottom:6px">Resolution Note</div>' +
+            '<div style="font-size:13px;color:var(--textd2);line-height:1.6">'+issue.resolution_note+'</div>' +
+          '</div>' : '') +
+      '</div>');
+
+  document.getElementById('drawer').style.display = 'block';
+  document.getElementById('drawer-overlay').style.display = 'block';
+}
+
+function closeDrawer(){
+  document.getElementById('drawer').style.display = 'none';
+  document.getElementById('drawer-overlay').style.display = 'none';
+}
+
+var resolveTargetId = null;
+
+function openResolveModal(id, title){
+  resolveTargetId = id;
+  document.getElementById('resolve-issue-id').textContent = id;
+  document.getElementById('resolve-issue-title').textContent = title || '';
+  document.getElementById('resolve-note').value = '';
+  var m = document.getElementById('resolve-modal');
+  m.classList.remove('modal-hidden');
+  m.style.display = 'flex';
+  setTimeout(function(){ document.getElementById('resolve-note').focus(); }, 150);
+}
+
+function closeResolveModal(){
+  var m = document.getElementById('resolve-modal');
+  m.style.display = 'none';
+  m.classList.add('modal-hidden');
+  resolveTargetId = null;
+}
+
+async function submitResolve(skip){
+  if(!resolveTargetId) return;
+  var note = skip ? '' : document.getElementById('resolve-note').value.trim();
+  var body = {status: 'resolved'};
+  if(note) body.resolution_note = note;
+  await fetch('/issues/'+resolveTargetId, {
+    method:'PATCH',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(body)
+  });
+  toast(resolveTargetId+' marked resolved ✓', 's');
+  closeResolveModal();
+  closeDrawer();
+  load(); loadStats();
+}
+
+async function resolveFromDrawer(id){
+  var issue = allIssues.find(function(i){ return i.id===id; });
+  openResolveModal(id, issue ? issue.title : '');
+}
+
+function quickResolve(id, encodedTitle){
+  var title = encodedTitle ? decodeURIComponent(encodedTitle) : '';
+  if(!title){
+    var issue = allIssues.find(function(i){ return i.id===id; });
+    title = issue ? issue.title : '';
+  }
+  openResolveModal(id, title);
+}
+
+/* ── Sidebar filter ── */
+function filterSev(sev){
+  var filtered = sev==='resolved'
+    ? allIssues.filter(function(i){ return i.status==='resolved'; })
+    : allIssues.filter(function(i){ return i.severity===sev; });
+  renderAudits(filtered);
+}
+
+/* ── Owner sidebar ── */
+function renderOwnerSidebar(data){
+  var om = {};
+  data.filter(function(i){ return i.status!=='resolved'; }).forEach(function(i){
+    if(i.owner_name){
+      if(!om[i.owner_name]) om[i.owner_name]={c:0,e:i.owner_email};
+      om[i.owner_name].c++;
+    }
+  });
+  var el = document.getElementById('sb-owners');
+  if(!Object.keys(om).length){ el.innerHTML='<p style="font-size:12px;color:var(--textd3);padding:4px 9px">No open issues</p>'; return; }
+  el.innerHTML = Object.entries(om).sort(function(a,b){ return b[1].c-a[1].c; }).map(function(e){
+    return '<div class="ow-row"><div class="av" style="background:'+ocolor(e[1].e)+'">'+ini(e[0])+'</div><div><div class="ow-name">'+e[0]+'</div><div class="ow-cnt">'+e[1].c+' open</div></div></div>';
+  }).join('');
+}
+
+async function exportCSV(){
+  var data = await fetch('/issues/').then(function(r){ return r.json(); });
+  var h = ['ID','Title','Severity','Category','Repo','File','Owner','Status','Created','Deadline'];
+  var rows = data.map(function(i){ return [i.id,'"'+(i.title||'').replace(/"/g,'""')+'"',i.severity,i.category||'',i.repo||'',i.file_path||'',i.owner_name||'',i.status,i.created_at||'',i.deadline_at||'']; });
+  var csv = [h,...rows].map(function(r){ return r.join(','); }).join('\n');
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
+  a.download = 'audit_'+new Date().toISOString().slice(0,10)+'.csv';
+  a.click();
+  toast('Exported', 's');
+}
+
+/* ── Live job tracker ── */
+var jobPollInterval = null;
+var pollChecks = 0;
+function checkActiveJobs(){
+  try{
+    var j = JSON.parse(sessionStorage.getItem('activeJobs')||'[]');
+    if(j&&j.length) showBanner(j);
+  }catch(e){}
+}
+function showBanner(jobs){
+  document.getElementById('job-banner').style.display='block';
+  pollChecks=0;
+  if(jobPollInterval) clearInterval(jobPollInterval);
+  jobPollInterval = setInterval(function(){
+    pollChecks++;
+    var pct = Math.min(88, pollChecks * 1.5);
+    document.getElementById('job-prog-bar').style.width = pct + '%';
+    var msgs = [
+      'Fetching files from GitHub…',
+      'Sending code to Claude AI for analysis…',
+      'AI is reviewing security and code quality…',
+      'Assigning issues to developers…',
+      'Saving results to database…',
+      'Almost done — wrapping up…'
+    ];
+    var msg = msgs[Math.min(Math.floor(pollChecks / 10), msgs.length-1)];
+    document.getElementById('job-status-text').textContent = msg;
+    loadStats();
+    load();
+    // Stop after 5 minutes (60 checks × 5s)
+    if(pollChecks > 60){
+      document.getElementById('job-prog-bar').style.width = '100%';
+      document.getElementById('job-status-text').textContent = 'Audit complete — see results below';
+      clearInterval(jobPollInterval);
+      try{ sessionStorage.removeItem('activeJobs'); }catch(e){}
+      setTimeout(dismissBanner, 8000);
+    }
+  }, 5000);
+}
+function dismissBanner(){
+  document.getElementById('job-banner').style.display='none';
+  if(jobPollInterval){clearInterval(jobPollInterval);jobPollInterval=null;}
+}
+
+/* Handle ?audit= redirect from new-audit page */
+(function(){
+  var p = new URLSearchParams(window.location.search);
+  var job = p.get('audit') || p.get('job');
+  if(job){
+    try{
+      var j = JSON.parse(sessionStorage.getItem('activeJobs')||'[]');
+      if(!j.includes(job)) j.push(job);
+      sessionStorage.setItem('activeJobs', JSON.stringify(j));
+    }catch(e){}
+    window.history.replaceState({}, document.title, '/');
+  }
+})();
+
+loadStats();
+load();
+checkActiveJobs();
+
+// Auto-refresh stats every 15s and full reload every 30s
+setInterval(function(){ loadStats(); }, 15000);
+setInterval(function(){ load(); }, 30000);
+{% endblock %}

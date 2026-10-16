@@ -1,0 +1,262 @@
+{% extends "base.html" %}
+{% block title %}Developers{% endblock %}
+{% block content %}
+<aside class="sidebar">
+  <div class="sb-sect">
+    <span class="sb-lbl">Navigation</span>
+    <a href="/"           class="sb-a"><div class="sb-l"><span class="sb-ic">📊</span><span class="sb-tx">Dashboard</span></div></a>
+    <a href="/new-audit" class="sb-a"><div class="sb-l"><span class="sb-ic">📁</span><span class="sb-tx">Browse &amp; Audit</span></div></a>
+    <a href="/followups"  class="sb-a"><div class="sb-l"><span class="sb-ic">⏱</span><span class="sb-tx">Follow-ups</span></div></a>
+    <a href="/developers" class="sb-a on"><div class="sb-l"><span class="sb-ic">👥</span><span class="sb-tx">Developers</span></div></a>
+  </div>
+  <div class="sb-hr"></div>
+  <div class="sb-sect">
+    <span class="sb-lbl">Team summary</span>
+    <div style="padding:10px 6px;display:flex;flex-direction:column;gap:9px">
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <span style="font-size:13px;color:var(--textd2)">👥 Total</span>
+        <span class="sb-badge b" id="sb-total">0</span>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <span style="font-size:13px;color:var(--textd2)">✅ Active</span>
+        <span class="sb-badge g" id="sb-active">0</span>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <span style="font-size:13px;color:var(--textd2)">🔴 With issues</span>
+        <span class="sb-badge r" id="sb-withissues">0</span>
+      </div>
+    </div>
+  </div>
+</aside>
+
+<main class="content">
+  <div class="ph">
+    <div>
+      <h1>Developer Panel</h1>
+      <p>Manage your team and send issue notifications</p>
+    </div>
+    <div class="ph-act">
+      <button class="btn btn-od btn-sm" onclick="notifyAll()">📨 Notify All</button>
+      <button class="btn btn-p" onclick="openAddModal()">+ Add Developer</button>
+    </div>
+  </div>
+
+  <!-- Developer grid -->
+  <div id="dev-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px">
+    <div class="loading"><div class="spin"></div>Loading developers…</div>
+  </div>
+</main>
+
+<!-- Add developer modal -->
+<div class="modal-ov" id="add-modal" style="display:none" onclick="if(event.target===this)closeAddModal()">
+  <div class="modal modal-wrap">
+    <div class="modal-x" onclick="closeAddModal()">✕</div>
+    <div class="modal-hd">
+      <div style="display:flex;align-items:center;gap:7px;margin-bottom:8px">
+        <span style="width:8px;height:8px;border-radius:50%;background:var(--gold);display:inline-block"></span>
+        <span style="font-size:12.5px;font-weight:600;color:var(--text2)">88gravity</span>
+      </div>
+      <h2>Add Developer</h2>
+      <p>Add a team member to receive code audit assignments and email notifications.</p>
+    </div>
+    <div class="modal-body" style="padding-top:20px">
+      <div class="fg"><label>Full name</label><input id="add-name" placeholder="e.g. Rahul Sharma"/></div>
+      <div class="fg"><label>Email address</label><input id="add-email" type="email" placeholder="e.g. rahul@88gravity.com"/></div>
+      <div class="fg">
+        <label>Role</label>
+        <select id="add-role">
+          <option value="Developer">Developer</option>
+          <option value="Senior Developer">Senior Developer</option>
+          <option value="Tech Lead">Tech Lead</option>
+          <option value="DevOps">DevOps</option>
+          <option value="QA Engineer">QA Engineer</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-ft">
+      <button class="btn btn-pd" style="width:100%;justify-content:center;padding:13px;font-size:14px;border-radius:10px" onclick="addDeveloper()" id="add-btn">Add Developer</button>
+      <p style="text-align:center;font-size:12px;color:var(--text3)">They'll receive email notifications when issues are assigned</p>
+    </div>
+  </div>
+</div>
+
+<!-- Issues modal for a developer -->
+<div class="modal-ov" id="issues-modal" style="display:none" onclick="if(event.target===this)closeIssuesModal()">
+  <div class="modal" style="width:600px;max-width:95vw">
+    <div style="padding:20px 22px;border-bottom:1px solid var(--border-card);display:flex;align-items:center;justify-content:space-between">
+      <h2 id="issues-modal-title" style="font-size:16px;font-weight:700;color:var(--text)">Open Issues</h2>
+      <div class="modal-x" onclick="closeIssuesModal()">✕</div>
+    </div>
+    <div id="issues-modal-body" style="padding:20px;max-height:60vh;overflow-y:auto"></div>
+    <div style="padding:14px 22px;border-top:1px solid var(--border-card);display:flex;justify-content:flex-end;gap:8px;background:var(--card2);border-radius:0 0 14px 14px">
+      <button class="btn btn-ow" onclick="closeIssuesModal()">Close</button>
+      <button class="btn btn-pd" id="notify-single-btn" onclick="">📨 Send Email Now</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+var allDevs = [];
+
+async function loadDevs(){
+  try {
+    var resp = await fetch('/developers/');
+    allDevs = await resp.json();
+    renderDevs(allDevs);
+    updateSidebar(allDevs);
+  } catch(e) {
+    document.getElementById('dev-grid').innerHTML =
+      '<div class="empty"><div class="empty-ico">❌</div><div class="empty-h">Failed to load</div><div class="empty-s">'+e.message+'</div></div>';
+  }
+}
+
+function updateSidebar(devs){
+  document.getElementById('sb-total').textContent  = devs.length;
+  document.getElementById('sb-active').textContent = devs.filter(function(d){ return d.active; }).length;
+}
+
+function renderDevs(devs){
+  var grid = document.getElementById('dev-grid');
+  if(!devs.length){
+    grid.innerHTML =
+      '<div class="empty" style="grid-column:1/-1;padding:64px 20px">' +
+        '<div class="empty-ico">👥</div>' +
+        '<div class="empty-h">No developers added yet</div>' +
+        '<div class="empty-s">Add your team members to assign audit issues and send notifications.</div>' +
+      '</div>';
+    return;
+  }
+
+  grid.innerHTML = devs.map(function(dev){
+    var initials = dev.name.trim().split(' ').map(function(w){ return w[0]; }).join('').substring(0,2).toUpperCase();
+    var color    = ocolor(dev.email);
+    var lastNote = dev.last_notified_at
+      ? 'Last notified ' + ago(dev.last_notified_at)
+      : 'Never notified';
+
+    return '<div class="gpanel" style="padding:0;overflow:hidden">' +
+      '<div style="padding:18px 18px 14px">' +
+        '<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:14px">' +
+          '<div style="display:flex;align-items:center;gap:11px">' +
+            '<div style="width:42px;height:42px;border-radius:50%;background:'+color+';display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;color:#fff;flex-shrink:0">'+initials+'</div>' +
+            '<div>' +
+              '<div style="font-weight:700;font-size:14.5px;color:var(--textd)">'+dev.name+'</div>' +
+              '<div style="font-size:12px;color:var(--textd3);margin-top:2px">'+dev.role+'</div>' +
+            '</div>' +
+          '</div>' +
+          '<div style="display:flex;align-items:center;gap:6px">' +
+            (dev.active
+              ? '<span style="background:rgba(22,163,74,.15);color:#86efac;border:1px solid rgba(22,163,74,.25);font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:99px">Active</span>'
+              : '<span style="background:rgba(220,38,38,.12);color:#fca5a5;border:1px solid rgba(220,38,38,.2);font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:99px">Inactive</span>') +
+            '<button class="btn btn-gh btn-xs" onclick="toggleActive(\''+dev.email+'\','+dev.active+')" style="color:var(--textd3);padding:3px 7px">'+(dev.active?'Deactivate':'Activate')+'</button>' +
+          '</div>' +
+        '</div>' +
+        '<div style="font-size:12.5px;color:var(--textd3);margin-bottom:12px">'+dev.email+'</div>' +
+        '<div style="font-size:11.5px;color:var(--textd3)">'+lastNote+'</div>' +
+      '</div>' +
+      '<div style="border-top:1px solid rgba(255,255,255,.07);padding:10px 14px;display:flex;gap:6px">' +
+        '<button class="btn btn-od btn-sm" style="flex:1;justify-content:center" onclick="viewIssues(\''+dev.email+'\',\''+dev.name+'\')">View Issues</button>' +
+        '<button class="btn btn-p btn-sm" style="flex:1;justify-content:center" onclick="notifyOne(\''+dev.email+'\',\''+dev.name+'\')">📨 Notify</button>' +
+        '<button class="btn btn-gh btn-xs" onclick="deleteDev(\''+dev.email+'\')" style="color:#fca5a5;padding:5px 9px">🗑</button>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+
+async function addDeveloper(){
+  var name  = document.getElementById('add-name').value.trim();
+  var email = document.getElementById('add-email').value.trim();
+  var role  = document.getElementById('add-role').value;
+  if(!name || !email){ toast('Name and email are required', 'e'); return; }
+  var btn = document.getElementById('add-btn');
+  btn.disabled = true; btn.textContent = 'Adding…';
+  try {
+    var resp = await fetch('/developers/', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({name: name, email: email.toLowerCase(), role: role})
+    });
+    if(!resp.ok){ var e = await resp.json(); throw new Error(e.detail || 'Failed'); }
+    closeAddModal();
+    document.getElementById('add-name').value  = '';
+    document.getElementById('add-email').value = '';
+    toast(name + ' added successfully', 's');
+    loadDevs();
+  } catch(e){ toast(e.message, 'e'); }
+  btn.disabled = false; btn.textContent = 'Add Developer';
+}
+
+async function deleteDev(email){
+  if(!confirm('Remove ' + email + ' from the team?')) return;
+  await fetch('/developers/' + encodeURIComponent(email), {method: 'DELETE'});
+  toast('Developer removed', 's');
+  loadDevs();
+}
+
+async function toggleActive(email, current){
+  await fetch('/developers/' + encodeURIComponent(email), {
+    method: 'PATCH',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({active: !current})
+  });
+  toast(current ? 'Developer deactivated' : 'Developer activated', 's');
+  loadDevs();
+}
+
+async function notifyOne(email, name){
+  toast('Sending email to ' + name + '…', 'i');
+  var resp = await fetch('/developers/' + encodeURIComponent(email) + '/notify', {method: 'POST'});
+  var d = await resp.json();
+  toast(d.message, d.sent ? 's' : 'w');
+}
+
+async function notifyAll(){
+  toast('Sending emails to all developers with open issues…', 'i');
+  var resp = await fetch('/developers/notify-all', {method: 'POST'});
+  var d = await resp.json();
+  var sent = d.notified.filter(function(x){ return x.sent; }).length;
+  toast('Emails sent to ' + sent + ' developer' + (sent!==1?'s':''), 's');
+}
+
+async function viewIssues(email, name){
+  document.getElementById('issues-modal-title').textContent = name + ' — Open Issues';
+  document.getElementById('issues-modal-body').innerHTML =
+    '<div class="loading"><div class="spin"></div>Loading…</div>';
+  document.getElementById('notify-single-btn').onclick = function(){ notifyOne(email, name); closeIssuesModal(); };
+  document.getElementById('issues-modal').style.display = 'flex';
+
+  try {
+    var resp  = await fetch('/developers/' + encodeURIComponent(email) + '/issues');
+    var items = await resp.json();
+    if(!items.length){
+      document.getElementById('issues-modal-body').innerHTML =
+        '<div style="text-align:center;padding:32px;color:var(--text3)">🎉 No open issues — great work!</div>';
+      return;
+    }
+    var sc = {critical:'b-r', warning:'b-a', info:'b-b'};
+    document.getElementById('issues-modal-body').innerHTML =
+      items.map(function(i){
+        return '<div style="padding:12px 0;border-bottom:1px solid var(--border-card);display:flex;align-items:flex-start;gap:12px">' +
+          '<span class="badge '+( sc[i.severity]||'b-x')+'">'+i.severity+'</span>' +
+          '<div style="flex:1">' +
+            '<div style="font-weight:600;color:var(--text);font-size:13px">'+i.title+'</div>' +
+            '<div style="font-size:11.5px;color:var(--text3);margin-top:3px;font-family:monospace">'+
+              (i.file_path||'').split('/').pop() + ' · ' + (i.repo||'') +
+            '</div>' +
+          '</div>' +
+          '<span class="badge b-x">'+i.status+'</span>' +
+        '</div>';
+      }).join('');
+  } catch(e) {
+    document.getElementById('issues-modal-body').innerHTML =
+      '<div style="color:var(--red);padding:16px">Failed: '+e.message+'</div>';
+  }
+}
+
+function openAddModal()  { document.getElementById('add-modal').style.display    = 'flex'; }
+function closeAddModal() { document.getElementById('add-modal').style.display    = 'none'; }
+function closeIssuesModal(){ document.getElementById('issues-modal').style.display = 'none'; }
+
+loadDevs();
+{% endblock %}

@@ -1,0 +1,407 @@
+{% extends "base.html" %}
+{% block title %}Browse & Audit{% endblock %}
+{% block content %}
+<aside class="sidebar">
+  <div class="sb-sect">
+    <span class="sb-lbl">Navigation</span>
+    <a href="/"          class="sb-a"><div class="sb-l"><span class="sb-ic">📊</span><span class="sb-tx">Dashboard</span></div></a>
+    <a href="/browse"    class="sb-a on"><div class="sb-l"><span class="sb-ic">📁</span><span class="sb-tx">Browse &amp; Audit</span></div></a>
+    <a href="/followups" class="sb-a"><div class="sb-l"><span class="sb-ic">⏱</span><span class="sb-tx">Follow-ups</span></div></a>
+  </div>
+  <div class="sb-hr"></div>
+  <div class="sb-sect">
+    <span class="sb-lbl">Connect repo</span>
+    <div style="padding:0 2px">
+      <div class="fg dark"><label>GitHub URL or owner/repo</label><input id="sr" placeholder="https://github.com/owner/repo"/></div>
+      <div class="fg dark"><label>Branch</label><input id="sb" value="main"/></div>
+      <button class="btn btn-p btn-sm" style="width:100%;justify-content:center" onclick="loadTree()" id="lb">Load →</button>
+      <p id="rmeta" style="margin-top:10px;font-size:12px;color:var(--textd3);line-height:1.5"></p>
+    </div>
+  </div>
+</aside>
+
+<main class="content">
+  <div class="ph">
+    <div><h1>Browse &amp; Audit</h1><p id="rl">Load a repository to begin</p></div>
+    <div class="ph-act">
+      <a href="/new-audit" class="btn btn-od btn-sm">+ New Audit</a>
+      <button class="btn btn-od btn-sm" onclick="clearQ()">Clear queue</button>
+      <button class="btn btn-p" id="rb" onclick="runAudit()" disabled>▶ Run audit</button>
+    </div>
+  </div>
+
+  <div class="browse-grid">
+    <div class="gpanel">
+      <div class="gpanel-hd">
+        <div><div class="gpanel-title">📁 Files</div><div class="gpanel-sub" id="ts">No repository loaded</div></div>
+        <span id="sc" style="font-size:12.5px;font-weight:700;color:#93c5fd">0 selected</span>
+      </div>
+      <div class="tree-search"><input id="tf" placeholder="🔍  Filter files…" oninput="filterTree(this.value)"/></div>
+      <div class="tree-scroll" id="tw">
+        <div class="empty" style="padding:36px 16px">
+          <div class="empty-ico">📂</div>
+          <div class="empty-h">No repo loaded</div>
+          <div class="empty-s">Enter a GitHub URL in the sidebar and click Load</div>
+        </div>
+      </div>
+      <div class="tree-ft">
+        <span style="font-size:12px;color:var(--textd3)" id="tc"></span>
+        <button class="btn btn-p btn-sm" id="ab" onclick="addQ()" disabled>Add to queue →</button>
+      </div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:16px">
+      <div class="gpanel">
+        <div class="gpanel-hd">
+          <div><div class="gpanel-title">📋 Audit queue</div><div class="gpanel-sub" id="qs">No files queued</div></div>
+          <div style="display:flex;gap:5px">
+            <button class="btn btn-gh btn-xs" onclick="clearQ()">Clear</button>
+            <button class="btn btn-p btn-xs" id="rb2" onclick="runAudit()" disabled>▶ Run all</button>
+          </div>
+        </div>
+        <div id="qw" style="padding:12px 14px;min-height:68px">
+          <p style="font-size:13px;color:var(--textd3);text-align:center;padding:18px">Select files and click "Add to queue"</p>
+        </div>
+        <div id="pw" style="display:none">
+          <div class="prog-wrap">
+            <div class="prog-track"><div class="prog-bar" id="pb" style="width:0%"></div></div>
+            <div class="prog-lbl" id="pl">Starting…</div>
+          </div>
+        </div>
+      </div>
+
+      <div id="rs" style="display:none">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+          <div style="font-size:16px;font-weight:700;color:var(--textd)" id="rt">Results</div>
+          <a href="/" class="btn btn-od btn-sm">View all →</a>
+        </div>
+        <div id="rb3"></div>
+      </div>
+    </div>
+  </div>
+</main>
+{% endblock %}
+
+{% block scripts %}
+/* All JS uses string concatenation — NO backtick template literals to avoid Jinja2 conflicts */
+
+var AUD = new Set(['js','ts','jsx','tsx','py','php','java','go','rb','cs','cpp','c','swift','kt','rs','vue','sql','sh','bash','yaml','yml','json','env','config']);
+var LANG = {js:'javascript',ts:'typescript',jsx:'javascript',tsx:'typescript',py:'python',php:'php',java:'java',go:'go',rb:'ruby',cs:'csharp',sql:'sql',sh:'bash',yaml:'yaml',yml:'yaml',vue:'vue',cpp:'cpp',c:'c',swift:'swift',kt:'kotlin',rs:'rust'};
+var FI = {js:'🟨',ts:'🔷',jsx:'⚛',tsx:'⚛',py:'🐍',php:'🐘',java:'☕',go:'🐹',rb:'💎',sql:'🗃',sh:'⚡',yaml:'📋',yml:'📋',json:'📦',vue:'💚',html:'🌐',css:'🎨',md:'📝',env:'🔒',config:'⚙'};
+var treeData = [], sel = new Set(), queue = [];
+var auditRunning = false;
+var activeJobs = [];
+
+// Warn user if they try to navigate away during an audit
+window.addEventListener('beforeunload', function(e){
+  if(auditRunning){
+    e.preventDefault();
+    e.returnValue = 'An audit is still running. Your results will still appear on the Dashboard — are you sure you want to leave?';
+    return e.returnValue;
+  }
+});
+
+// Store active job IDs so dashboard can track them
+function saveActiveJobs(){
+  try{ sessionStorage.setItem('activeJobs', JSON.stringify(activeJobs)); }catch(e){}
+}
+
+function getExt(p){ var s=p.split('.'); return s.length>1?s[s.length-1].toLowerCase():''; }
+function getIcon(p){ return FI[getExt(p)]||'📄'; }
+function getLang(p){ return LANG[getExt(p)]||'code'; }
+function isAud(p){ return AUD.has(getExt(p)); }
+
+async function loadTree(){
+  var raw = document.getElementById('sr').value.trim();
+  var br  = document.getElementById('sb').value.trim() || 'main';
+  if(!raw){ toast('Enter a repository URL', 'e'); return; }
+
+  // Parse full GitHub URLs or owner/repo
+  raw = raw
+    .replace(/^https?:\/\//i, '')
+    .replace(/^github\.com\//i, '')
+    .replace(/\.git$/i, '')
+    .replace(/\/$/, '');
+
+  var parts = raw.split('/');
+  if(parts.length < 2 || !parts[0] || !parts[1]){
+    toast('Cannot parse repo — use owner/repo format', 'e');
+    return;
+  }
+  var owner    = parts[0];
+  var repoName = parts[1];
+  document.getElementById('sr').value = owner + '/' + repoName;
+
+  var btn = document.getElementById('lb');
+  btn.disabled = true;
+  btn.textContent = 'Loading…';
+  document.getElementById('tw').innerHTML = '<div class="loading"><div class="spin"></div>Fetching files…</div>';
+  document.getElementById('rl').textContent = 'Loading ' + owner + '/' + repoName + '…';
+
+  try {
+    var url = '/audit/repos/' + owner + '/' + repoName + '/tree?branch=' + encodeURIComponent(br);
+    var resp = await fetch(url);
+    if(!resp.ok){
+      var err = await resp.json().catch(function(){ return {}; });
+      throw new Error(err.detail || ('HTTP ' + resp.status));
+    }
+    var d = await resp.json();
+
+    treeData = d.tree || [];
+    var usedBranch = d.branch || br;
+
+    document.getElementById('rl').textContent = owner+'/'+repoName+' ('+usedBranch+') — '+treeData.length+' files, '+d.auditable_files+' auditable';
+    document.getElementById('ts').textContent  = treeData.length+' files · '+d.auditable_files+' auditable';
+    document.getElementById('tc').textContent  = d.auditable_files+' auditable files';
+    if(d.description) document.getElementById('rmeta').textContent = d.description;
+
+    renderTree('');
+    toast('Loaded '+treeData.length+' files', 's');
+  } catch(e) {
+    document.getElementById('tw').innerHTML =
+      '<div class="empty" style="padding:36px 16px">' +
+        '<div class="empty-ico">❌</div>' +
+        '<div class="empty-h">'+e.message+'</div>' +
+        '<div class="empty-s">Check the repo name and branch, and that your GitHub token has access.</div>' +
+      '</div>';
+    toast(e.message, 'e');
+  }
+
+  btn.disabled = false;
+  btn.textContent = 'Load →';
+}
+
+function filterTree(q){ renderTree(q); }
+
+function renderTree(filter){
+  var files = filter
+    ? treeData.filter(function(f){ return f.path.toLowerCase().includes(filter.toLowerCase()); })
+    : treeData;
+
+  if(!files.length){
+    document.getElementById('tw').innerHTML = '<p style="padding:18px;text-align:center;font-size:13px;color:var(--textd3)">No files match</p>';
+    return;
+  }
+
+  // Group by top-level folder
+  var groups = {};
+  files.forEach(function(f){
+    var p = f.path.split('/');
+    var top = p.length === 1 ? '__root__' : p[0];
+    if(!groups[top]) groups[top] = [];
+    groups[top].push(f);
+  });
+
+  var html = '';
+
+  // Root files first
+  if(groups['__root__']){
+    groups['__root__'].forEach(function(f){ html += fileHTML(f, false); });
+  }
+
+  // Folders
+  Object.keys(groups).filter(function(k){ return k !== '__root__'; }).sort().forEach(function(dir){
+    var fs  = groups[dir];
+    var did = 'dir-' + dir.replace(/[^a-z0-9]/gi, '-');
+    var audCount = fs.filter(function(f){ return isAud(f.path); }).length;
+    html += '<div class="ti dir" onclick="toggleDir(\'' + did + '\')">' +
+              '<span style="font-size:14px">📁</span>' +
+              '<span class="ti-name">' + dir + '</span>' +
+              '<span class="ti-ext" style="background:rgba(37,99,235,.2);color:#93c5fd;border-color:rgba(37,99,235,.3)">' + audCount + '/' + fs.length + '</span>' +
+            '</div>' +
+            '<div id="' + did + '" style="display:none">';
+    fs.forEach(function(f){ html += fileHTML(f, true); });
+    html += '</div>';
+  });
+
+  document.getElementById('tw').innerHTML = html;
+}
+
+function fileHTML(f, indent){
+  var e    = getExt(f.path);
+  var aud  = isAud(f.path);
+  var isSel = sel.has(f.path);
+  var name = f.path.split('/').pop();
+  var cls  = 'ti' + (indent?' ti-ind':'') + (aud?' auditable':' na') + (isSel?' sel':'');
+  return '<div class="' + cls + '" data-path="' + f.path + '" onclick="toggleFile(\'' + f.path.replace(/'/g,"\\'") + '\',' + aud + ')">' +
+           '<span style="font-size:13px">' + getIcon(f.path) + '</span>' +
+           '<span class="ti-name">' + name + '</span>' +
+           '<span class="ti-ext">.' + (e||'?') + '</span>' +
+         '</div>';
+}
+
+function toggleDir(id){
+  var el = document.getElementById(id);
+  if(el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+function toggleFile(path, aud){
+  if(!aud){ toast('File type not auditable', 'i'); return; }
+  if(sel.has(path)) sel.delete(path); else sel.add(path);
+  document.querySelectorAll('[data-path="' + path + '"]').forEach(function(el){
+    el.classList.toggle('sel', sel.has(path));
+  });
+  var n = sel.size;
+  document.getElementById('sc').textContent = n + ' selected';
+  document.getElementById('ab').disabled = (n === 0);
+}
+
+function addQ(){
+  var newFiles = Array.from(sel).filter(function(p){ return !queue.find(function(q){ return q.path===p; }); });
+  newFiles.forEach(function(p){ queue.push({path:p, status:'q', issues:[]}); });
+  sel = new Set();
+  document.querySelectorAll('.ti.sel').forEach(function(el){ el.classList.remove('sel'); });
+  document.getElementById('sc').textContent = '0 selected';
+  document.getElementById('ab').disabled = true;
+  renderQueue();
+  if(newFiles.length) toast(newFiles.length + ' file(s) queued', 'i');
+}
+
+function clearQ(){
+  queue = [];
+  renderQueue();
+  document.getElementById('rb').disabled  = true;
+  document.getElementById('rb2').disabled = true;
+  document.getElementById('rs').style.display  = 'none';
+  document.getElementById('pw').style.display  = 'none';
+}
+
+function renderQueue(){
+  var n = queue.length;
+  document.getElementById('qs').textContent = n ? (n + ' file' + (n!==1?'s':'') + ' queued') : 'No files queued';
+  document.getElementById('rb').disabled  = (n === 0);
+  document.getElementById('rb2').disabled = (n === 0);
+  var el = document.getElementById('qw');
+  if(!n){
+    el.innerHTML = '<p style="font-size:13px;color:var(--textd3);text-align:center;padding:18px">Select files and click "Add to queue"</p>';
+    return;
+  }
+  var si = {q:'⏳', a:'🔄', d:'✅', e:'❌'};
+  el.innerHTML = queue.map(function(f, i){
+    var stLabel = f.status==='d' ? f.issues.length+' issue(s)' : f.status==='q' ? 'queued' : f.status==='a' ? 'auditing' : 'error';
+    var rmBtn   = f.status==='q' ? '<button class="btn btn-gh btn-xs" onclick="rmQ('+i+')" style="padding:2px 7px">✕</button>' : '';
+    return '<div class="qi ' + (f.status==='q'?'':f.status==='a'?'au':f.status==='d'?'dn':'er') + '">' +
+             '<span style="font-size:13px">' + getIcon(f.path) + '</span>' +
+             '<span class="qi-path">' + f.path + '</span>' +
+             '<span class="qi-st">' + (si[f.status]||'') + ' ' + stLabel + '</span>' +
+             rmBtn +
+           '</div>';
+  }).join('');
+}
+
+function rmQ(i){ queue.splice(i, 1); renderQueue(); }
+
+async function runAudit(){
+  if(!queue.length) return;
+  auditRunning = true;
+  activeJobs = [];
+  var repoVal = document.getElementById('sr').value.trim();
+  var br      = document.getElementById('sb').value.trim() || 'main';
+  document.getElementById('rb').disabled  = true;
+  document.getElementById('rb2').disabled = true;
+  document.getElementById('rs').style.display = 'block';
+  document.getElementById('rb3').innerHTML = '';
+  document.getElementById('rt').textContent = 'Auditing ' + queue.length + ' file(s)…';
+  document.getElementById('pw').style.display = 'block';
+  var tot = 0;
+
+  for(var i = 0; i < queue.length; i++){
+    var qf = queue[i];
+    if(qf.status === 'd') continue;
+    qf.status = 'a';
+    renderQueue();
+
+    document.getElementById('pb').style.width = Math.round(i / queue.length * 100) + '%';
+    document.getElementById('pl').textContent = 'File ' + (i+1) + ' of ' + queue.length + ': ' + qf.path.split('/').pop();
+
+    var bid = 'blk' + i;
+    document.getElementById('rb3').insertAdjacentHTML('beforeend',
+      '<div class="res-block" id="' + bid + '">' +
+        '<div class="res-hd"><code style="font-size:12px;color:var(--text2)">' + qf.path + '</code><div class="spin"></div></div>' +
+        '<div style="padding:14px;font-size:13px;color:var(--text3);display:flex;gap:8px;align-items:center">' +
+          '<div class="spin" style="width:14px;height:14px;border-width:2px"></div>Sending to AI…' +
+        '</div>' +
+      '</div>');
+
+    try {
+      var jd = await fetch('/audit/', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({repo: repoVal, branch: br, paths: [qf.path], park_to_jira: false, park_to_sheet: false})
+      }).then(function(r){ return r.json(); });
+      activeJobs.push(jd.job_id);
+      saveActiveJobs();
+
+      var issues = [];
+      // Poll up to 40x (every 3s = 2 minutes max) waiting for background job to finish
+      for(var p = 0; p < 40; p++){
+        await new Promise(function(r){ setTimeout(r, 3000); });
+        var sd = await fetch('/audit/status/' + jd.job_id).then(function(r){ return r.json(); });
+        // Keep polling until we get results OR exceed reasonable time
+        if(p >= 3 && sd.issues_found >= 0){
+          issues = sd.issues;
+          // If we got results (even 0) after at least 9s, treat as done
+          if(sd.issues_found > 0 || p >= 10) break;
+        }
+      }
+
+      qf.status = 'd';
+      qf.issues = issues;
+      tot += issues.length;
+
+      var sc = {critical:'b-r', warning:'b-a', info:'b-b'};
+      var s  = Math.max(10, 100 - issues.filter(function(x){ return x.severity==='critical'; }).length*20
+                               - issues.filter(function(x){ return x.severity==='warning';  }).length*8);
+
+      var issueHTML = issues.length
+        ? issues.map(function(iss){
+            return '<div class="ic ' + (iss.severity==='critical'?'cr':iss.severity==='warning'?'wa':'in') + '">' +
+                     '<div class="ic-hd">' +
+                       '<div class="ic-ttl">' + iss.title + '</div>' +
+                       '<div class="ic-bgs">' +
+                         '<span class="badge ' + (sc[iss.severity]||'b-x') + '">' + iss.severity + '</span>' +
+                         '<span class="badge b-x">' + (iss.category||'General') + '</span>' +
+                       '</div>' +
+                     '</div>' +
+                     (iss.line_number ? '<div class="ic-meta"><span class="lchip">Line ' + iss.line_number + '</span></div>' : '') +
+                     '<div class="ic-desc">' + (iss.description||'') + '</div>' +
+                     (iss.fix_suggestion ? '<div class="ic-fix"><span style="flex-shrink:0">💡</span>' + iss.fix_suggestion + '</div>' : '') +
+                     '<div class="ic-ft">' +
+                       '<div style="display:flex;align-items:center;gap:7px">' +
+                         '<div class="oav" style="background:' + ocolor(iss.owner_email||'') + '">' + ini(iss.owner_name) + '</div>' +
+                         '<span style="font-size:12.5px;color:var(--text2)">' + (iss.owner_name||'—') + '</span>' +
+                       '</div>' +
+                       '<a href="/issue/' + iss.id + '" class="btn btn-ow btn-xs">View →</a>' +
+                     '</div>' +
+                   '</div>';
+          }).join('')
+        : '<div style="display:flex;align-items:center;gap:9px;padding:8px 0;font-weight:600;color:var(--green)"><span style="font-size:20px">🎉</span>No issues — file looks clean!</div>';
+
+      document.getElementById(bid).innerHTML =
+        '<div class="res-hd">' +
+          '<div style="display:flex;align-items:center;gap:9px">' +
+            '<code style="font-size:12.5px;font-weight:600;color:var(--text)">' + qf.path + '</code>' +
+            '<span class="badge b-x">' + getLang(qf.path) + '</span>' +
+          '</div>' +
+          '<div style="display:flex;align-items:center;gap:9px">' + stag(s) + '<span style="font-size:12px;color:var(--text3)">' + issues.length + ' issue' + (issues.length!==1?'s':'') + '</span></div>' +
+        '</div>' +
+        '<div class="res-body">' + issueHTML + '</div>';
+
+    } catch(e) {
+      qf.status = 'e';
+      document.getElementById(bid).querySelector('div:last-child').innerHTML =
+        '<div style="padding:14px;color:var(--red);display:flex;gap:8px"><span>❌</span>' + e.message + '</div>';
+    }
+    renderQueue();
+  }
+
+  document.getElementById('pb').style.width = '100%';
+  document.getElementById('pl').textContent = '✅ Done — ' + tot + ' issue' + (tot!==1?'s':'') + ' found';
+  document.getElementById('rt').textContent = 'Results — ' + tot + ' issue' + (tot!==1?'s':'') + ' across ' + queue.length + ' file' + (queue.length!==1?'s':'');
+  document.getElementById('rb').disabled  = false;
+  document.getElementById('rb2').disabled = false;
+  auditRunning = false;
+  saveActiveJobs();
+  toast('Audit complete — ' + tot + ' issues', tot ? 'i' : 's');
+}
+{% endblock %}

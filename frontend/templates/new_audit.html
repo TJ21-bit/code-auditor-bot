@@ -1,0 +1,467 @@
+{% extends "base.html" %}
+{% block title %}New Audit{% endblock %}
+{% block content %}
+
+<main class="content" style="max-width:760px;margin:0 auto">
+
+  <!-- Header -->
+  <div style="margin-bottom:32px">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
+      <a href="/" style="color:var(--textd3);font-size:13px;text-decoration:none;display:flex;align-items:center;gap:5px">
+        ← Back
+      </a>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+      <span style="width:9px;height:9px;border-radius:50%;background:var(--gold);display:inline-block"></span>
+      <span style="font-size:12.5px;font-weight:600;color:var(--textd3)">88gravity · Code Auditor</span>
+    </div>
+    <h1 style="font-size:28px;font-weight:800;color:var(--textd);letter-spacing:-.6px;margin-bottom:6px">New Audit</h1>
+    <p style="color:var(--textd3);font-size:14px">Set up your audit step by step. All fields marked * are required.</p>
+  </div>
+
+  <!-- Step indicators -->
+  <div style="display:flex;align-items:center;gap:0;margin-bottom:36px">
+    <div class="step-ind active" id="si-1">
+      <div class="step-num">1</div>
+      <div class="step-lbl">Source</div>
+    </div>
+    <div class="step-line" id="sl-1"></div>
+    <div class="step-ind" id="si-2">
+      <div class="step-num">2</div>
+      <div class="step-lbl">Details</div>
+    </div>
+    <div class="step-line" id="sl-2"></div>
+    <div class="step-ind" id="si-3">
+      <div class="step-num">3</div>
+      <div class="step-lbl">Assign</div>
+    </div>
+    <div class="step-line" id="sl-3"></div>
+    <div class="step-ind" id="si-4">
+      <div class="step-num">4</div>
+      <div class="step-lbl">Review</div>
+    </div>
+  </div>
+
+  <!-- Step 1 — Source -->
+  <div id="step-1">
+    <div class="wz-card">
+      <div class="wz-card-title">📂 Choose your code source *</div>
+      <div class="wz-card-sub">Select where your code lives — GitHub repository or a local zip archive</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:20px">
+        <div class="src-opt" id="opt-github" onclick="selectSource('github')">
+          <div style="font-size:36px;margin-bottom:10px">🐙</div>
+          <div style="font-weight:700;font-size:15px;color:var(--textd);margin-bottom:4px">GitHub Repository</div>
+          <div style="font-size:12.5px;color:var(--textd3);line-height:1.5">Audit any public or private GitHub repo using a personal access token</div>
+        </div>
+        <div class="src-opt" id="opt-zip" onclick="selectSource('zip')">
+          <div style="font-size:36px;margin-bottom:10px">📦</div>
+          <div style="font-weight:700;font-size:15px;color:var(--textd);margin-bottom:4px">Upload Zip File</div>
+          <div style="font-size:12.5px;color:var(--textd3);line-height:1.5">Upload a .zip of your project folder — all auditable files will be scanned</div>
+        </div>
+      </div>
+    </div>
+    <div class="wz-nav">
+      <div></div>
+      <button class="btn btn-p" onclick="nextStep(2)" id="s1-next" disabled>Continue →</button>
+    </div>
+  </div>
+
+  <!-- Step 2 — Details -->
+  <div id="step-2" style="display:none">
+    <!-- GitHub details -->
+    <div id="det-github" class="wz-card">
+      <div class="wz-card-title">🐙 GitHub Repository Details</div>
+      <div class="wz-card-sub">Enter the repository URL and branch to audit</div>
+      <div style="margin-top:20px;display:flex;flex-direction:column;gap:16px">
+        <div>
+          <label class="wz-label">Repository URL *</label>
+          <input id="gh-url" class="wz-input" placeholder="https://github.com/owner/repo" oninput="validateStep2()"/>
+          <div style="font-size:12px;color:var(--textd3);margin-top:5px">Paste the full GitHub URL or use owner/repo format</div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+          <div>
+            <label class="wz-label">Branch *</label>
+            <input id="gh-branch" class="wz-input" value="main" oninput="validateStep2()"/>
+          </div>
+          <div>
+            <label class="wz-label">Specific file path <span style="font-weight:400;opacity:.6">(optional)</span></label>
+            <input id="gh-file" class="wz-input" placeholder="src/auth/login.py — blank = whole repo"/>
+          </div>
+        </div>
+        <div>
+          <label class="wz-label">Project name * <span style="font-weight:400;opacity:.6">shown on dashboard</span></label>
+          <input id="gh-label" class="wz-input" placeholder="e.g. 88gravity Chatbot — Sprint 12" oninput="validateStep2()"/>
+        </div>
+      </div>
+    </div>
+
+    <!-- Zip details -->
+    <div id="det-zip" class="wz-card" style="display:none">
+      <div class="wz-card-title">📦 Upload Zip File</div>
+      <div class="wz-card-sub">Upload your project as a .zip — all code files inside will be scanned</div>
+      <div style="margin-top:20px;display:flex;flex-direction:column;gap:16px">
+        <div>
+          <label class="wz-label">Zip file *</label>
+          <div id="dropzone"
+            onclick="document.getElementById('zip-file').click()"
+            ondragover="event.preventDefault();this.classList.add('dz-over')"
+            ondragleave="this.classList.remove('dz-over')"
+            ondrop="handleDrop(event)"
+            style="border:2px dashed rgba(255,255,255,.15);border-radius:10px;padding:36px 24px;text-align:center;cursor:pointer;transition:all .2s">
+            <div style="font-size:36px;margin-bottom:10px" id="dz-icon">📦</div>
+            <div style="font-weight:600;color:var(--textd);margin-bottom:4px" id="dz-label">Click to choose or drag &amp; drop</div>
+            <div style="font-size:12px;color:var(--textd3)">.zip files only</div>
+          </div>
+          <input type="file" id="zip-file" accept=".zip" style="display:none" onchange="handleZipSelect(this)"/>
+        </div>
+        <div>
+          <label class="wz-label">Project name *</label>
+          <input id="zip-name" class="wz-input" placeholder="e.g. 88gravity Chatbot" oninput="validateStep2()"/>
+        </div>
+        <div>
+          <label class="wz-label">Audit label <span style="font-weight:400;opacity:.6">(optional)</span></label>
+          <input id="zip-label" class="wz-input" placeholder="e.g. Pre-launch security check"/>
+        </div>
+      </div>
+    </div>
+
+    <div class="wz-nav">
+      <button class="btn btn-od" onclick="nextStep(1)">← Back</button>
+      <button class="btn btn-p" onclick="nextStep(3)" id="s2-next" disabled>Continue →</button>
+    </div>
+  </div>
+
+  <!-- Step 3 — Assign -->
+  <div id="step-3" style="display:none">
+    <div class="wz-card">
+      <div class="wz-card-title">👤 Assign to Developer</div>
+      <div class="wz-card-sub">Choose who is responsible for resolving issues found in this audit</div>
+      <div style="margin-top:20px">
+        <label class="wz-label">Assign to *</label>
+        <div id="dev-list" style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
+          <div style="font-size:13px;color:var(--textd3);padding:12px 0">Loading developers…</div>
+        </div>
+        <div style="margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,.07)">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--textd2)">
+            <input type="radio" name="dev-pick" value="__auto__" id="pick-auto" style="accent-color:var(--gold)" onchange="devPicked()"/>
+            <span>🤖 Auto-assign based on GitHub blame</span>
+          </label>
+        </div>
+      </div>
+    </div>
+    <div class="wz-card" style="margin-top:14px">
+      <div class="wz-card-title">📬 Notifications</div>
+      <div class="wz-card-sub">What should happen after the audit completes</div>
+      <div style="margin-top:16px;display:flex;flex-direction:column;gap:12px">
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
+          <input type="checkbox" id="opt-email" checked style="width:16px;height:16px;accent-color:var(--gold)"/>
+          <div>
+            <div style="font-size:13.5px;font-weight:600;color:var(--textd)">📨 Email developer with their issues</div>
+            <div style="font-size:12px;color:var(--textd3);margin-top:2px">Send a formatted email listing all issues assigned to them</div>
+          </div>
+        </label>
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
+          <input type="checkbox" id="opt-jira" style="width:16px;height:16px;accent-color:var(--gold)"/>
+          <div>
+            <div style="font-size:13.5px;font-weight:600;color:var(--textd)">📋 Create Jira tickets</div>
+            <div style="font-size:12px;color:var(--textd3);margin-top:2px">Park each issue as a ticket in Jira (requires Jira credentials in .env)</div>
+          </div>
+        </label>
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
+          <input type="checkbox" id="opt-sheet" checked style="width:16px;height:16px;accent-color:var(--gold)"/>
+          <div>
+            <div style="font-size:13.5px;font-weight:600;color:var(--textd)">📊 Append to Google Sheets</div>
+            <div style="font-size:12px;color:var(--textd3);margin-top:2px">Save all issues as rows in your connected spreadsheet</div>
+          </div>
+        </label>
+      </div>
+    </div>
+    <div class="wz-nav">
+      <button class="btn btn-od" onclick="nextStep(2)">← Back</button>
+      <button class="btn btn-p" onclick="nextStep(4)" id="s3-next" disabled>Review →</button>
+    </div>
+  </div>
+
+  <!-- Step 4 — Review & confirm -->
+  <div id="step-4" style="display:none">
+    <div class="wz-card">
+      <div class="wz-card-title">✅ Review &amp; Confirm</div>
+      <div class="wz-card-sub">Double-check everything before starting the audit</div>
+      <div id="review-body" style="margin-top:20px;display:flex;flex-direction:column;gap:0"></div>
+    </div>
+    <div class="wz-card" style="margin-top:14px;background:rgba(201,155,60,.06);border-color:rgba(201,155,60,.2)">
+      <div style="display:flex;align-items:flex-start;gap:12px">
+        <span style="font-size:22px;flex-shrink:0">⏱</span>
+        <div>
+          <div style="font-weight:700;color:var(--textd);margin-bottom:4px">What happens next</div>
+          <div style="font-size:13px;color:var(--textd3);line-height:1.6">
+            The audit runs in the background — you can navigate away freely.<br/>
+            Results appear on the <strong style="color:var(--textd2)">Dashboard</strong> within 1–3 minutes depending on file count.<br/>
+            The assigned developer will receive an email notification once complete.
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="wz-nav" style="margin-top:20px">
+      <button class="btn btn-od" onclick="nextStep(3)">← Back</button>
+      <button class="btn btn-g" style="padding:12px 32px;font-size:14px" onclick="startAudit()" id="start-btn">
+        🔍 Start Audit
+      </button>
+    </div>
+  </div>
+
+</main>
+
+<style>
+.wz-card { background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.09);border-radius:12px;padding:24px; }
+.wz-card-title { font-size:16px;font-weight:700;color:var(--textd);margin-bottom:5px;letter-spacing:-.2px; }
+.wz-card-sub   { font-size:13px;color:var(--textd3); }
+.wz-nav { display:flex;align-items:center;justify-content:space-between;margin-top:20px;padding-top:4px; }
+.wz-label { display:block;font-size:11.5px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--textd2);margin-bottom:7px; }
+.wz-input { width:100%;padding:11px 14px;border:1.5px solid rgba(255,255,255,.14);border-radius:9px;font-size:13.5px;font-family:var(--font);color:var(--textd);background:rgba(255,255,255,.07);outline:none;transition:all .15s; }
+.wz-input:focus { border-color:rgba(255,255,255,.35);background:rgba(255,255,255,.1);box-shadow:0 0 0 3px rgba(255,255,255,.05); }
+.wz-input::placeholder { color:var(--textd3); }
+
+.src-opt { border:2px solid rgba(255,255,255,.1);border-radius:12px;padding:24px;text-align:center;cursor:pointer;transition:all .18s; }
+.src-opt:hover { border-color:rgba(255,255,255,.25);background:rgba(255,255,255,.05); }
+.src-opt.active { border-color:var(--gold);background:rgba(201,155,60,.08); }
+
+.step-ind { display:flex;flex-direction:column;align-items:center;gap:5px;min-width:60px; }
+.step-num { width:28px;height:28px;border-radius:50%;border:2px solid rgba(255,255,255,.15);background:rgba(255,255,255,.04);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--textd3);transition:all .25s; }
+.step-lbl { font-size:11px;color:var(--textd3);font-weight:500;transition:all .25s; }
+.step-ind.active .step-num { border-color:var(--gold);background:rgba(201,155,60,.15);color:var(--gold); }
+.step-ind.active .step-lbl { color:var(--textd2); }
+.step-ind.done .step-num   { border-color:var(--green);background:rgba(22,163,74,.2);color:#86efac; }
+.step-ind.done .step-lbl   { color:var(--textd2); }
+.step-line { flex:1;height:2px;background:rgba(255,255,255,.08);margin:0 6px;margin-bottom:16px;transition:background .25s; }
+.step-line.done { background:rgba(22,163,74,.4); }
+
+.dev-radio { border:1.5px solid rgba(255,255,255,.1);border-radius:9px;padding:11px 14px;display:flex;align-items:center;gap:10px;cursor:pointer;transition:all .15s; }
+.dev-radio:hover { background:rgba(255,255,255,.05); }
+.dev-radio.selected { border-color:var(--gold);background:rgba(201,155,60,.08); }
+
+.review-row { display:flex;align-items:flex-start;justify-content:space-between;padding:13px 0;border-bottom:1px solid rgba(255,255,255,.07);gap:12px; }
+.review-row:last-child { border-bottom:none; }
+.review-key { font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;color:var(--textd3);flex-shrink:0;min-width:110px; }
+.review-val { font-size:13.5px;color:var(--textd);font-weight:500;text-align:right; }
+
+.dz-over { border-color:var(--gold) !important;background:rgba(201,155,60,.05); }
+</style>
+{% endblock %}
+
+{% block scripts %}
+var currentStep = 1;
+var auditSource = '';
+var selectedZip = null;
+var selectedDev  = '';
+
+/* ── Step navigation ── */
+function nextStep(n){
+  document.getElementById('step-' + currentStep).style.display = 'none';
+  // Mark old step
+  var old = document.getElementById('si-' + currentStep);
+  if(old){ old.classList.remove('active'); old.classList.add('done'); }
+  var line = document.getElementById('sl-' + currentStep);
+  if(line) line.classList.add('done');
+  // Activate new step
+  currentStep = n;
+  document.getElementById('step-' + n).style.display = 'block';
+  var cur = document.getElementById('si-' + n);
+  if(cur){ cur.classList.remove('done'); cur.classList.add('active'); }
+  if(n === 3) loadDevs();
+  if(n === 4) buildReview();
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+
+/* ── Step 1: source ── */
+function selectSource(src){
+  auditSource = src;
+  document.querySelectorAll('.src-opt').forEach(function(el){ el.classList.remove('active'); });
+  document.getElementById('opt-' + src).classList.add('active');
+  document.getElementById('s1-next').disabled = false;
+}
+
+/* ── Step 2: details ── */
+function validateStep2(){
+  var ok = false;
+  if(auditSource === 'github'){
+    ok = document.getElementById('gh-url').value.trim().length > 3
+      && document.getElementById('gh-branch').value.trim().length > 0
+      && document.getElementById('gh-label').value.trim().length > 0;
+  } else {
+    ok = selectedZip !== null
+      && document.getElementById('zip-name').value.trim().length > 0;
+  }
+  document.getElementById('s2-next').disabled = !ok;
+}
+
+function handleZipSelect(inp){
+  if(inp.files[0]){
+    selectedZip = inp.files[0];
+    document.getElementById('dz-icon').textContent  = '✅';
+    document.getElementById('dz-label').textContent = inp.files[0].name;
+    // Auto-fill project name from filename
+    var n = inp.files[0].name.replace('.zip','').replace(/[-_]/g,' ');
+    if(!document.getElementById('zip-name').value)
+      document.getElementById('zip-name').value = n;
+    validateStep2();
+  }
+}
+function handleDrop(e){
+  e.preventDefault();
+  document.getElementById('dropzone').classList.remove('dz-over');
+  var f = e.dataTransfer.files[0];
+  if(f && f.name.endsWith('.zip')){
+    selectedZip = f;
+    document.getElementById('dz-icon').textContent  = '✅';
+    document.getElementById('dz-label').textContent = f.name;
+    if(!document.getElementById('zip-name').value)
+      document.getElementById('zip-name').value = f.name.replace('.zip','').replace(/[-_]/g,' ');
+    validateStep2();
+  } else { toast('Please drop a .zip file', 'e'); }
+}
+
+function selectSource2(src){
+  document.getElementById('det-github').style.display = src==='github' ? 'block' : 'none';
+  document.getElementById('det-zip').style.display    = src==='zip'    ? 'block' : 'none';
+}
+
+/* ── Step 3: developers ── */
+var devList = [];
+async function loadDevs(){
+  try {
+    var resp = await fetch('/developers/');
+    devList  = await resp.json();
+    var el   = document.getElementById('dev-list');
+    if(!devList.length){
+      el.innerHTML = '<div style="background:rgba(217,119,6,.08);border:1px solid rgba(217,119,6,.2);border-radius:8px;padding:14px;font-size:13px;color:#fcd34d">' +
+        '⚠️ No developers added yet. <a href="/developers" style="color:#fcd34d;font-weight:700">Add developers →</a> then come back.' +
+        '</div>';
+      document.getElementById('pick-auto').closest('div').style.display='none';
+    } else {
+      el.innerHTML = devList.filter(function(d){ return d.active; }).map(function(d){
+        var col = ocolor(d.email);
+        var ini2 = d.name.trim().split(' ').map(function(w){ return w[0]; }).join('').substring(0,2).toUpperCase();
+        return '<label class="dev-radio" id="dr-' + d.email.replace(/[@.]/g,'-') + '" ' +
+               'onclick="pickDev(\'' + d.email + '\',\'' + d.name + '\')">' +
+          '<input type="radio" name="dev-pick" value="' + d.email + '" style="accent-color:var(--gold)" onchange="devPicked()"/>' +
+          '<div style="width:32px;height:32px;border-radius:50%;background:' + col + ';display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;flex-shrink:0">' + ini2 + '</div>' +
+          '<div style="flex:1">' +
+            '<div style="font-weight:600;color:var(--textd);font-size:13.5px">' + d.name + '</div>' +
+            '<div style="font-size:12px;color:var(--textd3)">' + d.role + ' · ' + d.email + '</div>' +
+          '</div>' +
+        '</label>';
+      }).join('');
+    }
+  } catch(e){ document.getElementById('dev-list').innerHTML = '<div style="color:var(--textd3);font-size:13px">Failed to load developers</div>'; }
+}
+
+function pickDev(email, name){
+  selectedDev = email;
+  document.querySelectorAll('.dev-radio').forEach(function(el){ el.classList.remove('selected'); });
+  var el = document.getElementById('dr-' + email.replace(/[@.]/g,'-'));
+  if(el) el.classList.add('selected');
+  devPicked();
+}
+function devPicked(){
+  var picked = document.querySelector('input[name="dev-pick"]:checked');
+  document.getElementById('s3-next').disabled = !picked;
+  if(picked && picked.value !== '__auto__') selectedDev = picked.value;
+  else if(picked) selectedDev = '__auto__';
+}
+
+/* ── Step 4: review ── */
+function buildReview(){
+  var rows = [];
+  rows.push({k:'Source', v: auditSource==='github' ? '🐙 GitHub' : '📦 Zip Upload'});
+  if(auditSource==='github'){
+    var url = document.getElementById('gh-url').value.trim();
+    var br  = document.getElementById('gh-branch').value.trim();
+    var fp  = document.getElementById('gh-file').value.trim();
+    var lbl = document.getElementById('gh-label').value.trim();
+    rows.push({k:'Repository', v: url});
+    rows.push({k:'Branch', v: br});
+    if(fp)  rows.push({k:'File filter', v: fp});
+    if(lbl) rows.push({k:'Label', v: lbl});
+  } else {
+    rows.push({k:'File', v: selectedZip ? selectedZip.name : '—'});
+    rows.push({k:'Project', v: document.getElementById('zip-name').value.trim()});
+    var lbl2 = document.getElementById('zip-label').value.trim();
+    if(lbl2) rows.push({k:'Label', v: lbl2});
+  }
+  // Developer
+  var devName = selectedDev === '__auto__' ? '🤖 Auto-assign (GitHub blame)' : (function(){
+    var d = devList.find(function(x){ return x.email===selectedDev; });
+    return d ? d.name + ' (' + d.email + ')' : selectedDev;
+  })();
+  rows.push({k:'Assigned to', v: devName});
+  // Options
+  var opts = [];
+  if(document.getElementById('opt-email').checked)  opts.push('📨 Email notification');
+  if(document.getElementById('opt-jira').checked)   opts.push('📋 Jira tickets');
+  if(document.getElementById('opt-sheet').checked)  opts.push('📊 Google Sheets');
+  rows.push({k:'After audit', v: opts.join(' · ') || 'No notifications'});
+
+  document.getElementById('review-body').innerHTML = rows.map(function(r){
+    return '<div class="review-row"><span class="review-key">'+r.k+'</span><span class="review-val">'+r.v+'</span></div>';
+  }).join('');
+}
+
+/* ── Start audit ── */
+async function startAudit(){
+  var btn = document.getElementById('start-btn');
+  btn.disabled = true; btn.textContent = '⏳ Starting…';
+  try {
+    var d;
+    if(auditSource === 'zip'){
+      var form = new FormData();
+      form.append('file', selectedZip);
+      form.append('park_to_jira',  document.getElementById('opt-jira').checked);
+      form.append('park_to_sheet', document.getElementById('opt-sheet').checked);
+      form.append('project_name',  document.getElementById('zip-name').value.trim());
+      if(selectedDev && selectedDev !== '__auto__') form.append('assigned_to', selectedDev);
+      d = await fetch('/audit/upload-zip', {method:'POST', body: form}).then(function(r){ return r.json(); });
+    } else {
+      var raw = document.getElementById('gh-url').value.trim();
+      raw = raw.replace(/^https?:\/\//i,'').replace(/^github\.com\//i,'').replace(/\.git$/i,'').replace(/\/$/,'').split('/').slice(0,2).join('/');
+      var fp = document.getElementById('gh-file').value.trim();
+      var body = {
+        repo:          raw,
+        branch:        document.getElementById('gh-branch').value.trim() || 'main',
+        paths:         fp ? [fp] : null,
+        project_name:  document.getElementById('gh-label').value.trim(),
+        park_to_jira:  document.getElementById('opt-jira').checked,
+        park_to_sheet: document.getElementById('opt-sheet').checked,
+        assigned_to:   selectedDev !== '__auto__' ? selectedDev : null,
+      };
+      d = await fetch('/audit/', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)}).then(function(r){ return r.json(); });
+    }
+    // Save job to sessionStorage BEFORE redirecting
+    try{
+      var jobs = JSON.parse(sessionStorage.getItem('activeJobs')||'[]');
+      jobs.push(d.job_id);
+      sessionStorage.setItem('activeJobs', JSON.stringify(jobs));
+    }catch(e){}
+    // Small delay to ensure sessionStorage is written, then redirect
+    await new Promise(function(r){ setTimeout(r, 300); });
+    window.location.href = '/?audit=' + encodeURIComponent(d.job_id);
+  } catch(e){
+    toast('Failed: ' + e.message, 'e');
+    btn.disabled = false; btn.textContent = '🔍 Start Audit';
+  }
+}
+
+/* Show correct detail panel */
+document.addEventListener('DOMContentLoaded', function(){
+  // Step 2 panels shown based on source selection in step 1
+});
+// Watch for step 2 becoming visible to show correct panel
+var _origNext = nextStep;
+nextStep = function(n){
+  _origNext(n);
+  if(n === 2){
+    document.getElementById('det-github').style.display = auditSource==='github' ? 'block' : 'none';
+    document.getElementById('det-zip').style.display    = auditSource==='zip'    ? 'block' : 'none';
+  }
+};
+{% endblock %}
